@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#087e75"><title>اطلب من بقالة سواحل</title>
+<style>
+*{box-sizing:border-box}body{font-family:Arial,Tahoma,sans-serif;background:#f4f7f6;margin:0;color:#18302e}
+.wrap{max-width:680px;margin:auto;padding:16px}.head{background:linear-gradient(135deg,#087e75,#075b57);color:white;padding:22px;border-radius:20px}
+.head h1{margin:0 0 8px;font-size:25px}.head p{margin:0;color:#e0f2ef}
+section{background:white;padding:16px;border-radius:16px;margin-top:14px;box-shadow:0 2px 12px #1231}
+h2{font-size:18px;margin:0 0 12px}.item{display:flex;gap:12px;align-items:center;border-bottom:1px solid #edf1f0;padding:12px 0}
+.item:last-child{border:0}.item-info{flex:1;min-width:0}.item-name{font-weight:bold}.price{font-size:13px;color:#687976;margin-top:5px}
+.qty{width:95px!important;flex:0 0 95px}label{display:block;margin:12px 0 6px;font-weight:bold;font-size:14px}
+input,textarea,select{width:100%;padding:12px;border:1px solid #ccd8d6;border-radius:10px;font:inherit;background:white}
+button,.wa{display:block;background:#087e75;color:white;border:0;padding:13px 18px;border-radius:11px;font:inherit;text-align:center;text-decoration:none;width:100%;margin-top:12px;cursor:pointer}
+button:disabled{opacity:.55;cursor:wait}.wa{background:#16834b}.muted{color:#667;font-size:13px;line-height:1.7}
+.total{font-size:21px;font-weight:bold;color:#087e75}.message{padding:12px;border-radius:10px;background:#eff8f5;margin-top:12px;line-height:1.7;white-space:pre-wrap}
+.hidden{display:none}.empty{padding:16px;text-align:center;color:#667}
+</style></head>
+<body><main class="wrap">
+<header class="head"><h1 id="shopName">بقالة سواحل</h1><p>اطلب احتياجاتك اليومية وسنتواصل معك لتأكيد الطلب</p></header>
+<section><h2>الأصناف المتوفرة</h2><div id="products" class="muted">جارٍ تحميل الأصناف...</div><p class="total" id="total">الإجمالي: 0 ريال يمني</p></section>
+<section><h2>بيانات العميل</h2>
+<form id="order">
+<label for="customer_name">الاسم الكامل</label><input id="customer_name" name="customer_name" maxlength="100" autocomplete="name" required>
+<label for="phone">رقم الهاتف</label><input id="phone" name="phone" type="tel" maxlength="25" autocomplete="tel" required>
+<label for="fulfillment">طريقة الاستلام</label><select id="fulfillment" name="fulfillment"><option value="delivery">توصيل إلى المنزل</option><option value="pickup">استلام من المحل</option></select>
+<div id="addressWrap"><label for="address">العنوان بالتفصيل</label><textarea id="address" name="address" rows="3" maxlength="400" placeholder="الحي، الشارع، أقرب معلم..." required></textarea></div>
+<label for="notes">ملاحظات (اختياري)</label><textarea id="notes" name="notes" rows="2" maxlength="500"></textarea>
+<button id="submit" type="submit">إرسال الطلب</button></form>
+<div id="result" aria-live="polite"></div><a id="whatsapp" class="wa hidden" target="_blank" rel="noopener">إرسال تفاصيل الطلب عبر واتساب</a>
+<p class="muted">لن يتم خصم أي مبلغ إلكترونياً. ستتواصل معك البقالة لتأكيد الطلب وطريقة التسليم.</p>
+</section></main>
+<script>
+'use strict';
+let products=[], config={whatsapp_enabled:false};const cart=new Map();
+const money=n=>Number(n||0).toLocaleString('ar-YE',{maximumFractionDigits:2});
+function el(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n;}
+async function load(){
+ try{
+  const [pr,cf]=await Promise.all([fetch('/api/products'),fetch('/api/store-config')]);
+  if(!pr.ok||!cf.ok)throw Error('تعذر جلب بيانات المتجر');
+  products=await pr.json();config=await cf.json();
+  document.getElementById('shopName').textContent=config.shop_name||'بقالة سواحل';
+  const host=document.getElementById('products');host.replaceChildren();
+  if(!products.length){host.append(el('p','empty','لا توجد أصناف منشورة حالياً. يرجى المحاولة لاحقاً.'));return;}
+  products.forEach(p=>{
+   const row=el('div','item'),info=el('div','item-info'),name=el('div','item-name',p.name),price=el('div','price',`${money(p.price)} ريال / ${p.unit||'حبة'}`),qty=document.createElement('input');
+   info.append(name,price);qty.className='qty';qty.type='number';qty.min='0';qty.max='10000';qty.step='0.1';qty.value='0';qty.inputMode='decimal';qty.setAttribute('aria-label',`كمية ${p.name}`);
+   qty.addEventListener('input',()=>{const q=Math.max(0,Math.min(10000,Number(qty.value)||0));if(q)cart.set(p.id,q);else cart.delete(p.id);calculate();});
+   row.append(info,qty);host.append(row);
+  });
+ }catch(e){document.getElementById('products').textContent='تعذر تحميل الأصناف. تحقق من اتصال الإنترنت ثم أعد تحميل الصفحة.';}
+}
+function calculate(){let total=0;products.forEach(p=>total+=p.price*(cart.get(p.id)||0));document.getElementById('total').textContent=`الإجمالي: ${money(total)} ريال يمني`;}
+document.getElementById('fulfillment').addEventListener('change',e=>{
+ const pickup=e.target.value==='pickup', address=document.getElementById('address'), wrap=document.getElementById('addressWrap');
+ wrap.classList.toggle('hidden',pickup);address.required=!pickup;if(pickup)address.value='استلام من المحل';else if(address.value==='استلام من المحل')address.value='';
+});
+document.getElementById('order').addEventListener('submit',async e=>{
+ e.preventDefault();const items=products.map(p=>({product_id:p.id,quantity:cart.get(p.id)||0})).filter(x=>x.quantity>0);
+ if(!items.length){alert('اختر صنفاً واحداً على الأقل');return;}
+ const payload=Object.fromEntries(new FormData(e.target).entries());payload.items=items;
+ const btn=document.getElementById('submit'),result=document.getElementById('result'),wa=document.getElementById('whatsapp');
+ btn.disabled=true;btn.textContent='جارٍ إرسال الطلب...';result.replaceChildren();wa.classList.add('hidden');
+ try{
+  const r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  const d=await r.json();if(!r.ok)throw Error(d.error||'تعذر إرسال الطلب');
+  result.append(el('div','message',`تم استلام طلبك بنجاح.\nرقم الطلب: ${d.code}\nالإجمالي: ${money(d.total)} ريال يمني\nستتواصل معك بقالة سواحل لتأكيد الطلب.`));
+  if(d.whatsapp_url){wa.href=d.whatsapp_url;wa.classList.remove('hidden');}
+  e.target.reset();cart.clear();document.getElementById('address').required=true;document.getElementById('addressWrap').classList.remove('hidden');
+  document.querySelectorAll('.qty').forEach(q=>q.value='0');calculate();
+ }catch(err){result.append(el('div','message',err.message||'حدث خطأ. حاول مرة أخرى.'));}
+ finally{btn.disabled=false;btn.textContent='إرسال الطلب';}
+});
+load();
+</script></body></html>
